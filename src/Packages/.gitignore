@@ -1,4 +1,5 @@
 **/*.dll
+!**/Plugins/*.dll
 !**/*.prefab
 !**/*.meta
 !Samples~
