@@ -4,6 +4,7 @@
 // This project is under the MIT license. See the LICENSE.md file for more details.
 
 using System;
+using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -29,6 +30,7 @@ namespace VoltstroStudios.UnityWebBrowser.Core
     internal class WebBrowserCommunicationsManager : IEngineControls, IClientControls, IDisposable
     {
         private static ProfilerMarker sendEventMarker = new("UWB.SendEvent");
+        private static ProfilerMarker drainInputMarker = new("UWB.DrainInput");
         public readonly WebBrowserClient client;
 
         private readonly IEngineControls engineProxy;
@@ -43,6 +45,8 @@ namespace VoltstroStudios.UnityWebBrowser.Core
         private readonly object threadLock;
         private readonly SynchronizationContext unityThread;
         private readonly CancellationTokenSource cancellationTokenSource;
+
+        private readonly ConcurrentQueue<Action> inputQueue = new();
 
         /// <summary>
         ///     Creates a new <see cref="WebBrowserCommunicationsManager" /> instance
@@ -97,9 +101,30 @@ namespace VoltstroStudios.UnityWebBrowser.Core
             {
                 lock (threadLock)
                 {
+                    DrainInputQueueLocked();
                     return engineProxy.GetPixels();
                 }
             }
+        }
+
+        /// <summary>
+        ///     Drains all queued input events. Must be called while holding threadLock.
+        /// </summary>
+        private void DrainInputQueueLocked()
+        {
+            drainInputMarker.Begin();
+            while (inputQueue.TryDequeue(out Action action))
+            {
+                try
+                {
+                    action.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    logger.Error($"Error executing queued input event! {ex}");
+                }
+            }
+            drainInputMarker.End();
         }
 
         public void Shutdown()
@@ -112,22 +137,22 @@ namespace VoltstroStudios.UnityWebBrowser.Core
 
         public void SendKeyboardEvent(KeyboardEvent keyboardEvent)
         {
-            ExecuteTask(() => engineProxy.SendKeyboardEvent(keyboardEvent));
+            inputQueue.Enqueue(() => engineProxy.SendKeyboardEvent(keyboardEvent));
         }
 
         public void SendMouseMoveEvent(MouseMoveEvent mouseMoveEvent)
         {
-            ExecuteTask(() => engineProxy.SendMouseMoveEvent(mouseMoveEvent));
+            inputQueue.Enqueue(() => engineProxy.SendMouseMoveEvent(mouseMoveEvent));
         }
 
         public void SendMouseClickEvent(MouseClickEvent mouseClickEvent)
         {
-            ExecuteTask(() => engineProxy.SendMouseClickEvent(mouseClickEvent));
+            inputQueue.Enqueue(() => engineProxy.SendMouseClickEvent(mouseClickEvent));
         }
 
         public void SendMouseScrollEvent(MouseScrollEvent mouseScrollEvent)
         {
-            ExecuteTask(() => engineProxy.SendMouseScrollEvent(mouseScrollEvent));
+            inputQueue.Enqueue(() => engineProxy.SendMouseScrollEvent(mouseScrollEvent));
         }
 
         public Vector2 GetScrollPosition()
