@@ -41,7 +41,6 @@ namespace VoltstroStudios.UnityWebBrowser.Core
         public readonly PixelsEventTypeReader pixelsEventTypeReader;
 
         private readonly object threadLock;
-        private readonly object inputLock;
         private readonly SynchronizationContext unityThread;
         private readonly CancellationTokenSource cancellationTokenSource;
 
@@ -53,7 +52,6 @@ namespace VoltstroStudios.UnityWebBrowser.Core
         public WebBrowserCommunicationsManager(WebBrowserClient browserClient, CancellationTokenSource cancellationTokenSource)
         {
             threadLock = new object();
-            inputLock = new object();
             unityThread = SynchronizationContext.Current;
 
             logger = browserClient.logger;
@@ -114,22 +112,22 @@ namespace VoltstroStudios.UnityWebBrowser.Core
 
         public void SendKeyboardEvent(KeyboardEvent keyboardEvent)
         {
-            ExecuteTask(() => engineProxy.SendKeyboardEvent(keyboardEvent), inputLock);
+            ExecuteTask(() => engineProxy.SendKeyboardEvent(keyboardEvent));
         }
 
         public void SendMouseMoveEvent(MouseMoveEvent mouseMoveEvent)
         {
-            ExecuteTask(() => engineProxy.SendMouseMoveEvent(mouseMoveEvent), inputLock);
+            ExecuteTask(() => engineProxy.SendMouseMoveEvent(mouseMoveEvent));
         }
 
         public void SendMouseClickEvent(MouseClickEvent mouseClickEvent)
         {
-            ExecuteTask(() => engineProxy.SendMouseClickEvent(mouseClickEvent), inputLock);
+            ExecuteTask(() => engineProxy.SendMouseClickEvent(mouseClickEvent));
         }
 
         public void SendMouseScrollEvent(MouseScrollEvent mouseScrollEvent)
         {
-            ExecuteTask(() => engineProxy.SendMouseScrollEvent(mouseScrollEvent), inputLock);
+            ExecuteTask(() => engineProxy.SendMouseScrollEvent(mouseScrollEvent));
         }
 
         public Vector2 GetScrollPosition()
@@ -245,11 +243,6 @@ namespace VoltstroStudios.UnityWebBrowser.Core
 
         internal void ExecuteTask(Action action, [CallerMemberName] string memberName = "")
         {
-            ExecuteTask(action, threadLock, memberName);
-        }
-
-        internal void ExecuteTask(Action action, object lockObj, [CallerMemberName] string memberName = "")
-        {
             if (!IsConnected)
                 return;
 
@@ -258,7 +251,7 @@ namespace VoltstroStudios.UnityWebBrowser.Core
                 sendEventMarker.Begin();
                 try
                 {
-                    lock (lockObj)
+                    lock (threadLock)
                     {
                         action.Invoke();
                     }
