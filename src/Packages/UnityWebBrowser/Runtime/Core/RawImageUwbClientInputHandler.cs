@@ -21,7 +21,8 @@ namespace VoltstroStudios.UnityWebBrowser.Core
         IPointerEnterHandler,
         IPointerExitHandler,
         IPointerDownHandler,
-        IPointerUpHandler
+        IPointerUpHandler,
+        IPointerMoveHandler
     {
         /// <summary>
         ///     The <see cref="WebBrowserInputHandler" /> to use
@@ -40,6 +41,7 @@ namespace VoltstroStudios.UnityWebBrowser.Core
 
         private Coroutine keyboardAndMouseHandlerCoroutine;
         private Vector2 lastSuccessfulMousePositionSent;
+        private bool pointerIsInside;
 
         public void OnPointerDown(PointerEventData eventData)
         {
@@ -68,11 +70,13 @@ namespace VoltstroStudios.UnityWebBrowser.Core
             if (browserClient is { IsConnected: false })
                 return;
 
-            keyboardAndMouseHandlerCoroutine = StartCoroutine(KeyboardAndMouseHandler());
+            pointerIsInside = true;
+            keyboardAndMouseHandlerCoroutine = StartCoroutine(KeyboardAndScrollHandler());
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
+            pointerIsInside = false;
             StopKeyboardAndMouseHandler();
         }
 
@@ -96,6 +100,21 @@ namespace VoltstroStudios.UnityWebBrowser.Core
 
             if (GetMousePosition(out Vector2 pos))
                 browserClient.SendMouseClick(pos, clickCount, clickType, MouseEventType.Up);
+        }
+
+        public void OnPointerMove(PointerEventData eventData)
+        {
+            if (disableMouseInputs)
+                return;
+
+            if (browserClient is { IsConnected: false } || !browserClient.ReadySignalReceived)
+                return;
+
+            if (GetMousePosition(out Vector2 pos) && lastSuccessfulMousePositionSent != pos)
+            {
+                browserClient.SendMouseMove(pos);
+                lastSuccessfulMousePositionSent = pos;
+            }
         }
 
         protected override void OnStart()
@@ -159,32 +178,22 @@ namespace VoltstroStudios.UnityWebBrowser.Core
             }
         }
 
-        private IEnumerator KeyboardAndMouseHandler()
+        private IEnumerator KeyboardAndScrollHandler()
         {
             inputHandler.OnStart();
 
-            while (Application.isPlaying)
+            while (Application.isPlaying && pointerIsInside)
             {
                 yield return 0;
 
-                if (!browserClient.ReadySignalReceived || !browserClient.IsConnected 
+                if (!browserClient.ReadySignalReceived || !browserClient.IsConnected
                                                        || browserClient.HasDisposed)
-                    continue;
-
-                if (disableMouseInputs && disableKeyboardInputs)
                     continue;
 
                 if (GetMousePosition(out Vector2 pos))
                 {
                     if (!disableMouseInputs)
                     {
-                        //Mouse position
-                        if (lastSuccessfulMousePositionSent != pos)
-                        {
-                            browserClient.SendMouseMove(pos);
-                            lastSuccessfulMousePositionSent = pos;
-                        }
-
                         //Mouse scroll
                         float scroll = inputHandler.GetScroll();
                         scroll *= browserClient.BrowserTexture.height;
