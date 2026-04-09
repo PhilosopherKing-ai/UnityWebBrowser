@@ -128,7 +128,7 @@ namespace VoltstroStudios.UnityWebBrowser.Input
 
         public override void EnableIme(Vector2 location)
         {
-            //Appears we still have to set UnityEngine.Input.imeCompositionMode?
+            if (keyboard == null) return;
             compositionMode = UnityEngine.Input.imeCompositionMode;
             UnityEngine.Input.imeCompositionMode = IMECompositionMode.On;
             
@@ -138,6 +138,7 @@ namespace VoltstroStudios.UnityWebBrowser.Input
 
         public override void DisableIme()
         {
+            if (keyboard == null) return;
             UnityEngine.Input.imeCompositionMode = compositionMode;
             switch (compositionMode)
             {
